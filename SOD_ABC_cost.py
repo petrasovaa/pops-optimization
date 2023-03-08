@@ -100,7 +100,7 @@ def pops(treatments, average, weather_file, nprocs):
         natural_direction="N",
         natural_dispersal_kernel="exponential",
         seasonality=[1, 12],
-        weather_coef_file=weather_file,
+        weather_coefficient_file=weather_file,
         average=average,
         output_frequency="every_n_steps",
         output_frequency_n="400",
