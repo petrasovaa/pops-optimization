@@ -237,6 +237,7 @@ def main(
     min_particles,
     filter_percentile,
     threshold_percentile,
+    output,
     nprocs,
 ):
     treatment_map = gs.append_node_pid("treatments")
