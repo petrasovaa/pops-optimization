@@ -252,7 +252,7 @@ def main(
     cost_norm_column = minmax_scale(df, cost_column)
     df["prior_weight"] = (df[potential_norm_column] + 1 - df[cost_norm_column]) / 2
 
-    initial_evaluated = pops(None, average_map)
+    initial_evaluated = pops(None, average_map, weather_file, nprocs)
     print(f"Initial evaluated: {initial_evaluated}")
     weights = dict(zip(df.cat, df.prior_weight))
     costs = dict(zip(df.cat, df[cost_column]))
