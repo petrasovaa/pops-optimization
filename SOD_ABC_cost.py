@@ -242,7 +242,7 @@ def main(
 ):
     treatment_map = gs.append_node_pid("treatments")
     average_map = gs.append_node_pid("average")
-    weather_file = gs.tempfile()
+    weather_file = gs.tempfile(create=False)
     gs.run_command(
         "g.list", mapset="weather", flags="m", type="raster", output=weather_file
     )
