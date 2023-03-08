@@ -148,6 +148,7 @@ def generation(
     percentile,
     weather_file,
     buffer_distance,
+    nprocs,
 ):
     tested = 0
     new_weights = {key: 0 for key in weights}
@@ -268,6 +269,7 @@ def main(
             costs,
             budget,
             weather_file,
+            buffer_distance,
             nprocs,
         )
     )
@@ -287,15 +289,13 @@ def main(
             weights,
             costs,
             budget,
-            10,
+            threshold_percentile,
             weather_file,
             buffer_distance,
             nprocs,
         )
         acceptance_rates.append(acceptance_rate)
         thresholds.append(perc_evaluated)
-        # filter_percentile = max(min(20, -100 * acceptance_rate + 30), 10)
-        filter_percentile = 15
         filtered_df = filter_particles(tmpdf, weights, iteration, filter_percentile)
         if filtered_df[cost_column].sum() >= budget:
             print(f"Filtered {len(tmpdf) - len(filtered_df)} pixels from {len(tmpdf)}")
@@ -314,12 +314,12 @@ def main(
 
 
 if __name__ == "__main__":
-    budget = sys.argv[1]
-    min_particles = sys.argv[2]
-    filter_percentile = sys.argv[3]
-    threshold_percentile = sys.argv[4]
+    budget = float(sys.argv[1])
+    min_particles = int(sys.argv[2])
+    filter_percentile = float(sys.argv[3])
+    threshold_percentile = float(sys.argv[4])
     output = sys.argv[5]
-    nprocs = sys.argv[6]
+    nprocs = int(sys.argv[6])
     infected = "infected_2019"
     potential = "potential"
     cost = "pixel_cost"
