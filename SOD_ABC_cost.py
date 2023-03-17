@@ -60,6 +60,7 @@ def prepare_treatments_buffer(df, treatment_map, distance):
         input=f"{treatment_map}_points",
         output=f"{treatment_map}_buffers",
         distance=distance,
+        overwrite=True,
         quiet=True,
     )
     actual_area = float(
@@ -81,6 +82,7 @@ def prepare_treatments_buffer(df, treatment_map, distance):
         input=f"{treatment_map}_buffers",
         output=f"{treatment_map}_buffers",
         use="val",
+        overwrite=True,
         quiet=True,
     )
     gs.del_temp_region()
@@ -89,10 +91,11 @@ def prepare_treatments_buffer(df, treatment_map, distance):
         input=f"{treatment_map}_buffers",
         output=f"{treatment_map}_count",
         method="count",
+        overwrite=True,
         quiet=True,
     )
     info = gs.raster_info(f"{treatment_map}_count")
-    gs.mapcalc(f"{treatment_map} = {treatment_map}_count / {info['max']}", quiet=True)
+    gs.mapcalc(f"{treatment_map} = {treatment_map}_count / {info['max']}", quiet=True, overwrite=True)
     return actual_area / max_area
 
 
