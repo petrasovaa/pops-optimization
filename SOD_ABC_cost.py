@@ -263,6 +263,7 @@ def main(
     treatment_map = gs.append_node_pid("treatments")
     average_map = gs.append_node_pid("average")
     weather_file = gs.tempfile(create=False)
+    buffer_distance = buffer_distance if buffer_distance > 0 else None
     gs.run_command(
         "g.list", mapset="weather", flags="m", type="raster", output=weather_file
     )
@@ -341,11 +342,11 @@ if __name__ == "__main__":
     min_particles = int(sys.argv[3])
     filter_percentile = float(sys.argv[4])
     threshold_percentile = float(sys.argv[5])
-    output = sys.argv[6]
-    nprocs = int(sys.argv[7])
+    buffer_distance = float(sys.argv[6])
+    output = sys.argv[7]
+    nprocs = int(sys.argv[8])
     infected = "infected_2019"
     potential = "potential"
-    buffer_distance = None
     main(
         infected,
         potential,
