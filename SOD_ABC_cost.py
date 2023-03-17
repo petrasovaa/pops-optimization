@@ -337,14 +337,14 @@ def main(
 
 if __name__ == "__main__":
     budget = float(sys.argv[1])
-    min_particles = int(sys.argv[2])
-    filter_percentile = float(sys.argv[3])
-    threshold_percentile = float(sys.argv[4])
-    output = sys.argv[5]
-    nprocs = int(sys.argv[6])
+    cost = sys.argv[2]
+    min_particles = int(sys.argv[3])
+    filter_percentile = float(sys.argv[4])
+    threshold_percentile = float(sys.argv[5])
+    output = sys.argv[6]
+    nprocs = int(sys.argv[7])
     infected = "infected_2019"
     potential = "potential"
-    cost = "pixel_cost"
     buffer_distance = None
     main(
         infected,
