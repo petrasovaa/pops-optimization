@@ -42,8 +42,7 @@ def prepare_treatments(df, treatment_map):
     )
 
 
-def prepare_treatments_buffer(df, treatment_map, distance):
-    max_area = len(df) * math.pi * distance * distance
+def prepare_treatments_buffer(df, treatment_map, distance, cost_raster):
     treatments_string = df.to_csv(None, header=False, index=False)
     region = gs.region()
     gs.write_command(
@@ -62,18 +61,6 @@ def prepare_treatments_buffer(df, treatment_map, distance):
         distance=distance,
         overwrite=True,
         quiet=True,
-    )
-    actual_area = float(
-        gs.read_command(
-            "v.report",
-            flags="c",
-            map=f"{treatment_map}_buffers",
-            option="area",
-            units="meters",
-            separator="comma",
-        )
-        .strip()
-        .split(",")[-1]
     )
     gs.use_temp_region()
     gs.run_command("g.region", res=region["nsres"] / 10, flags="a")
@@ -95,8 +82,20 @@ def prepare_treatments_buffer(df, treatment_map, distance):
         quiet=True,
     )
     info = gs.raster_info(f"{treatment_map}_count")
-    gs.mapcalc(f"{treatment_map} = {treatment_map}_count / {info['max']}", quiet=True, overwrite=True)
-    return actual_area / max_area
+    gs.mapcalc(
+        f"{treatment_map} = {treatment_map}_count / {info['max']}",
+        quiet=True,
+        overwrite=True,
+    )
+    gs.mapcalc(
+        f"{treatment_map}_cost = {treatment_map} * {cost_raster}",
+        quiet=True,
+        overwrite=True,
+    )
+    actual_cost = float(
+        gs.parse_command("r.univar", map=f"{treatment_map}_cost", flags="g")["sum"]
+    )
+    return actual_cost
 
 
 def pops(treatments, average, weather_file, nprocs):
@@ -166,6 +165,7 @@ def generation(
     percentile,
     weather_file,
     buffer_distance,
+    cost_raster,
     nprocs,
 ):
     tested = 0
@@ -173,14 +173,16 @@ def generation(
     evaluated_list = []
     best_candidate_df = None
     minim_evaluated = baseline_evaluated
-    actual_area = []
+    actual_cost = []
 
     while len(evaluated_list) < min_particles:
         candidate_cats = select_cats_by_cost(weights, costs, budget)
         candidate_df = df.loc[df.cat.isin(candidate_cats)]
         if buffer_distance:
-            actual_area.append(
-                prepare_treatments_buffer(candidate_df, treatment_map, buffer_distance)
+            actual_cost.append(
+                prepare_treatments_buffer(
+                    candidate_df, treatment_map, buffer_distance, cost_raster
+                )
             )
         else:
             prepare_treatments(candidate_df, treatment_map)
@@ -211,7 +213,7 @@ def generation(
         acceptance_rate,
         perc / baseline_evaluated,
         (minim_evaluated, best_candidate_df),
-        actual_area,
+        actual_cost,
     )
 
 
@@ -225,6 +227,7 @@ def estimate_initial_threshold(
     budget,
     weather_file,
     buffer_distance,
+    cost_raster,
     nprocs,
 ):
     weights = {key: 1 for key in costs}
@@ -233,7 +236,9 @@ def estimate_initial_threshold(
         candidate_cats = select_cats_by_cost(weights, costs, budget)
         candidate_df = df.loc[df.cat.isin(candidate_cats)]
         if buffer_distance:
-            prepare_treatments_buffer(candidate_df, treatment_map, buffer_distance)
+            prepare_treatments_buffer(
+                candidate_df, treatment_map, buffer_distance, cost_raster
+            )
         else:
             prepare_treatments(candidate_df, treatment_map)
         evaluated.append(pops(treatment_map, average_map, weather_file, nprocs))
@@ -255,6 +260,7 @@ def main(
     infected,
     potential_column,
     cost_column,
+    cost_raster,
     buffer_distance,
     budget,
     min_particles,
@@ -293,17 +299,18 @@ def main(
             budget,
             weather_file,
             buffer_distance,
+            cost_raster,
             nprocs,
         )
     )
     acceptance_rates = []
-    actual_area_mean = []
+    actual_cost_mean = []
     filtered_dfs = []
     tmpdf = df.copy()
     iteration = 0
     while True:
         print(f"Iteration {iteration}: threshold {thresholds[-1]}")
-        weights, acceptance_rate, perc_evaluated, best, actual_area = generation(
+        weights, acceptance_rate, perc_evaluated, best, actual_cost = generation(
             df,
             treatment_map,
             average_map,
@@ -316,11 +323,12 @@ def main(
             threshold_percentile,
             weather_file,
             buffer_distance,
+            cost_raster,
             nprocs,
         )
         acceptance_rates.append(acceptance_rate)
         thresholds.append(perc_evaluated)
-        actual_area_mean.append(sum(actual_area) / len(actual_area))
+        actual_cost_mean.append(sum(actual_cost) / len(actual_cost))
         filtered_df = filter_particles(tmpdf, weights, iteration, filter_percentile)
         if filtered_df[cost_column].sum() >= budget:
             print(f"Filtered {len(tmpdf) - len(filtered_df)} pixels from {len(tmpdf)}")
@@ -336,7 +344,7 @@ def main(
     tmpdf.to_csv(os.path.join(output, "last_filtered.csv"))
     print(f"Acceptance rate: {acceptance_rates}")
     print(f"Thresholds: {thresholds}")
-    print(f"Actual area ratios: {actual_area_mean}")
+    print(f"Actual cost: {actual_cost_mean}")
 
 
 if __name__ == "__main__":
@@ -350,10 +358,12 @@ if __name__ == "__main__":
     nprocs = int(sys.argv[8])
     infected = "infected_2019"
     potential = "potential"
+    cost_raster = "walk_cost"
     main(
         infected,
         potential,
         cost,
+        cost_raster,
         buffer_distance,
         budget,
         min_particles,
