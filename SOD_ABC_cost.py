@@ -76,7 +76,7 @@ def prepare_treatments_buffer(df, treatment_map, distance):
         .split(",")[-1]
     )
     gs.use_temp_region()
-    gs.run_command("g.region", res=region["nsres"] / 10, flags="pa")
+    gs.run_command("g.region", res=region["nsres"] / 10, flags="a")
     gs.run_command(
         "v.to.rast",
         input=f"{treatment_map}_buffers",
