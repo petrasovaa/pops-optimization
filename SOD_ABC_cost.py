@@ -331,7 +331,7 @@ def main(
         )
         acceptance_rates.append(acceptance_rate)
         thresholds.append(perc_evaluated)
-        actual_cost_mean.append(sum(actual_cost) / len(actual_cost))
+        actual_cost_mean.append(sum(actual_cost) / len(actual_cost) if len(actual_cost) else None)
         filtered_df = filter_particles(tmpdf, weights, iteration, filter_percentile)
         if filtered_df[cost_column].sum() >= budget:
             print(f"Filtered {len(tmpdf) - len(filtered_df)} pixels from {len(tmpdf)}")
