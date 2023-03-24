@@ -21,9 +21,12 @@ def read_points(name):
 
 
 def minmax_scale(df, column):
-    df[f"{column}_norm"] = (df[column] - df[column].min()) / (
-        df[column].max() - df[column].min()
-    )
+    if df[column].max() - df[column].min() > 0:
+        df[f"{column}_norm"] = (df[column] - df[column].min()) / (
+            df[column].max() - df[column].min()
+        )
+    else:
+        df[f"{column}_norm"] = 0
     return f"{column}_norm"
 
 
