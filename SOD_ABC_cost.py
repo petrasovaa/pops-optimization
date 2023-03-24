@@ -259,6 +259,29 @@ def filter_particles(df, weights, iteration, percentile):
     return new_df
 
 
+def best_guess(
+    df,
+    weight_column,
+    cost_column,
+    budget,
+    treatment_map,
+    average_map,
+    buffer_distance,
+    cost_raster,
+    weather_file,
+    nprocs,
+):
+    sorted_df = df.sort_values(weight_column, ascending=False)
+    candidate_df = sorted_df[sorted_df[cost_column].cumsum() < budget]
+    if buffer_distance:
+        prepare_treatments_buffer(
+            candidate_df, treatment_map, buffer_distance, cost_raster
+        )
+    else:
+        prepare_treatments(candidate_df, treatment_map)
+    return pops(treatment_map, average_map, weather_file, nprocs)
+
+
 def main(
     infected,
     potential_column,
@@ -287,6 +310,20 @@ def main(
 
     initial_evaluated = pops(None, average_map, weather_file, nprocs)
     print(f"Initial evaluated: {initial_evaluated}")
+
+    best_guess_evaluated = best_guess(
+        df,
+        "prior_weight",
+        cost_column,
+        budget,
+        treatment_map,
+        average_map,
+        buffer_distance,
+        cost_raster,
+        weather_file,
+        nprocs,
+    )
+    print(f"Best guess: {best_guess_evaluated}")
     weights = dict(zip(df.cat, df.prior_weight))
     costs = dict(zip(df.cat, df[cost_column]))
 
@@ -331,7 +368,9 @@ def main(
         )
         acceptance_rates.append(acceptance_rate)
         thresholds.append(perc_evaluated)
-        actual_cost_mean.append(sum(actual_cost) / len(actual_cost) if len(actual_cost) else None)
+        actual_cost_mean.append(
+            sum(actual_cost) / len(actual_cost) if len(actual_cost) else None
+        )
         filtered_df = filter_particles(tmpdf, weights, iteration, filter_percentile)
         if filtered_df[cost_column].sum() >= budget:
             print(f"Filtered {len(tmpdf) - len(filtered_df)} pixels from {len(tmpdf)}")
