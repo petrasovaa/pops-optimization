@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 import io
 import random
-import math
 import grass.script as gs
 
 
@@ -45,8 +44,12 @@ def prepare_treatments(df, treatment_map):
     )
 
 
-def prepare_treatments_buffer(df, treatment_map, distance, cost_raster):
-    treatments_string = df.to_csv(None, header=False, index=False)
+def prepare_treatments_buffer(
+    df, treatment_map, distance, distance_column, cost_raster
+):
+    treatments_string = df.to_csv(None, header=True, index=False)
+    header = treatments_string.splitlines()[0].split(",")
+
     region = gs.region()
     gs.write_command(
         "v.in.ascii",
@@ -54,17 +57,35 @@ def prepare_treatments_buffer(df, treatment_map, distance, cost_raster):
         stdin=treatments_string,
         output=f"{treatment_map}_points",
         separator="comma",
+        skip=1,
         overwrite=True,
         quiet=True,
     )
-    gs.run_command(
-        "v.buffer",
-        input=f"{treatment_map}_points",
-        output=f"{treatment_map}_buffers",
-        distance=distance,
-        overwrite=True,
-        quiet=True,
-    )
+    if distance_column:
+        table_column_index = header.index(distance_column) + 1
+        column = (
+            gs.read_command("db.columns", table=f"{treatment_map}_points")
+            .strip()
+            .splitlines()[table_column_index]
+        )
+        gs.run_command(
+            "v.buffer",
+            input=f"{treatment_map}_points",
+            output=f"{treatment_map}_buffers",
+            column=column,
+            layer=1,
+            overwrite=True,
+            quiet=True,
+        )
+    else:
+        gs.run_command(
+            "v.buffer",
+            input=f"{treatment_map}_points",
+            output=f"{treatment_map}_buffers",
+            distance=distance,
+            overwrite=True,
+            quiet=True,
+        )
     gs.use_temp_region()
     gs.run_command("g.region", res=region["nsres"] / 10, flags="a")
     gs.run_command(
@@ -168,6 +189,7 @@ def generation(
     percentile,
     weather_file,
     buffer_distance,
+    buffer_distance_column,
     cost_raster,
     nprocs,
 ):
@@ -181,10 +203,14 @@ def generation(
     while len(evaluated_list) < min_particles:
         candidate_cats = select_cats_by_cost(weights, costs, budget)
         candidate_df = df.loc[df.cat.isin(candidate_cats)]
-        if buffer_distance:
+        if buffer_distance or buffer_distance_column:
             actual_cost.append(
                 prepare_treatments_buffer(
-                    candidate_df, treatment_map, buffer_distance, cost_raster
+                    candidate_df,
+                    treatment_map,
+                    buffer_distance,
+                    buffer_distance_column,
+                    cost_raster,
                 )
             )
         else:
@@ -230,6 +256,7 @@ def estimate_initial_threshold(
     budget,
     weather_file,
     buffer_distance,
+    buffer_distance_column,
     cost_raster,
     nprocs,
 ):
@@ -238,9 +265,13 @@ def estimate_initial_threshold(
     for run in range(runs):
         candidate_cats = select_cats_by_cost(weights, costs, budget)
         candidate_df = df.loc[df.cat.isin(candidate_cats)]
-        if buffer_distance:
+        if buffer_distance or buffer_distance_column:
             prepare_treatments_buffer(
-                candidate_df, treatment_map, buffer_distance, cost_raster
+                candidate_df,
+                treatment_map,
+                buffer_distance,
+                buffer_distance_column,
+                cost_raster,
             )
         else:
             prepare_treatments(candidate_df, treatment_map)
@@ -267,15 +298,20 @@ def best_guess(
     treatment_map,
     average_map,
     buffer_distance,
+    buffer_distance_column,
     cost_raster,
     weather_file,
     nprocs,
 ):
     sorted_df = df.sort_values(weight_column, ascending=False)
     candidate_df = sorted_df[sorted_df[cost_column].cumsum() < budget]
-    if buffer_distance:
+    if buffer_distance or buffer_distance_column:
         prepare_treatments_buffer(
-            candidate_df, treatment_map, buffer_distance, cost_raster
+            candidate_df,
+            treatment_map,
+            buffer_distance,
+            buffer_distance_column,
+            cost_raster,
         )
     else:
         prepare_treatments(candidate_df, treatment_map)
@@ -288,6 +324,7 @@ def main(
     cost_column,
     cost_raster,
     buffer_distance,
+    buffer_distance_column,
     budget,
     min_particles,
     filter_percentile,
@@ -298,7 +335,6 @@ def main(
     treatment_map = gs.append_node_pid("treatments")
     average_map = gs.append_node_pid("average")
     weather_file = gs.tempfile(create=False)
-    buffer_distance = buffer_distance if buffer_distance > 0 else None
     gs.run_command(
         "g.list", mapset="weather", flags="m", type="raster", output=weather_file
     )
@@ -319,6 +355,7 @@ def main(
         treatment_map,
         average_map,
         buffer_distance,
+        buffer_distance_column,
         cost_raster,
         weather_file,
         nprocs,
@@ -339,6 +376,7 @@ def main(
             budget,
             weather_file,
             buffer_distance,
+            buffer_distance_column,
             cost_raster,
             nprocs,
         )
@@ -363,6 +401,7 @@ def main(
             threshold_percentile,
             weather_file,
             buffer_distance,
+            buffer_distance_column,
             cost_raster,
             nprocs,
         )
@@ -395,7 +434,13 @@ if __name__ == "__main__":
     min_particles = int(sys.argv[3])
     filter_percentile = float(sys.argv[4])
     threshold_percentile = float(sys.argv[5])
-    buffer_distance = float(sys.argv[6])
+    try:
+        buffer_distance = float(sys.argv[6])
+        buffer_distance = buffer_distance if buffer_distance > 0 else None
+        buffer_distance_column = None
+    except ValueError:
+        buffer_distance = None
+        buffer_distance_column = sys.argv[6]
     output = sys.argv[7]
     nprocs = int(sys.argv[8])
     infected = "infected_2019"
@@ -407,6 +452,7 @@ if __name__ == "__main__":
         cost,
         cost_raster,
         buffer_distance,
+        buffer_distance_column,
         budget,
         min_particles,
         filter_percentile,
