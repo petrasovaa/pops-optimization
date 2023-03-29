@@ -304,7 +304,7 @@ def best_guess(
     nprocs,
 ):
     sorted_df = df.sort_values(weight_column, ascending=False)
-    candidate_df = sorted_df[sorted_df[cost_column].cumsum() < budget]
+    candidate_df = sorted_df[sorted_df[cost_column].cumsum() <= budget]
     if buffer_distance or buffer_distance_column:
         prepare_treatments_buffer(
             candidate_df,
