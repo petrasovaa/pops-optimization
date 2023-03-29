@@ -315,6 +315,7 @@ def best_guess(
         )
     else:
         prepare_treatments(candidate_df, treatment_map)
+    candidate_df.to_csv(os.path.join(output, "best_guess.csv"))
     return pops(treatment_map, average_map, weather_file, nprocs)
 
 
