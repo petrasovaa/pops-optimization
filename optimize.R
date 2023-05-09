@@ -338,7 +338,6 @@ optimize <- function(infestation_potential_file,
     budget,
     multi_pops_parameters
   )
-  # best_guess$candidate
   message("Best guess:", best_guess$evaluation)
 
   # initial threshold
