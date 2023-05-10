@@ -18,7 +18,7 @@ pixel_treatments <- function(points, treatments_raster, treatments_file) {
 
 buffer_treatments <- function(points, treatments_raster, treatments_file, cost_raster) {
   rasterization_factor <- 10
-  buffers <- terra::buffer(points, width = points$buffer_size[[1]])
+  buffers <- terra::buffer(points, width = points$buffer_size)
   high_res_raster <- terra::disagg(treatments_raster, fact = rasterization_factor)
   buffers_raster <- terra::rasterize(buffers, high_res_raster)
   count_raster <- terra::aggregate(buffers_raster,
@@ -27,7 +27,7 @@ buffer_treatments <- function(points, treatments_raster, treatments_file, cost_r
       length(x[!is.na(x)])
     }
   )
-  treatment_raster <- count_raster / terra::global(count_raster, "max")[[1]]
+  treatments_raster <- count_raster / terra::global(count_raster, "max")[[1]]
   treatment_cost_raster <- treatments_raster * cost_raster
   terra::writeRaster(treatments_raster, treatments_file, overwrite = TRUE)
   actual_cost <- terra::global(treatment_cost_raster, "sum", na.rm = T)[[1]]
@@ -35,7 +35,7 @@ buffer_treatments <- function(points, treatments_raster, treatments_file, cost_r
 }
 
 treatments <- function(points, treatments_raster, treatments_file, cost_raster) {
-  if ("buffer_size" %in% colnames(points)) {
+  if ("buffer_size" %in% names(points)) {
     buffer_treatments(
       points,
       treatments_raster,
@@ -549,17 +549,25 @@ optimize <- function(infestation_potential_file,
 
 library("PoPS")
 
+potential_file <- "/home/akratoc/dev/pops/optimization/potential.tif"
+pixel_cost_file <- "/home/akratoc/dev/pops/optimization/walk_cost.tif"
+infected_file <- "/home/akratoc/dev/pops/optimization/infected_2019.tif"
+host_file <- "/home/akratoc/dev/pops/optimization/host.tif"
+total_file <- "/home/akratoc/dev/pops/optimization/total.tif"
+weather_file <- "/home/akratoc/dev/pops/optimization/weather.tif"
+buffer_size_file <- "/home/akratoc/dev/pops/optimization/buffer_size.tif"
+buffer_cost_file <- "/home/akratoc/dev/pops/optimization/buffer_cost.tif"
 results <- optimize(
-  infestation_potential_file = "/tmp/potential.tif",
-  cost_file = "/tmp/walk_cost.tif",
-  buffer_size_file = NULL,
+  infestation_potential_file = potential_file,
+  cost_file = buffer_cost_file,
+  buffer_size_file = buffer_size_file,
   min_particles = 10,
-  budget = 20000,
+  budget = 80000,
   filter_percentile = 15,
   threshold_percentile = 10,
-  infected_file = "/tmp/infected_2019.tif",
-  host_file = "/tmp/host.tif",
-  total_populations_file = "/tmp/total.tif",
+  infected_file = infected_file,
+  host_file = host_file,
+  total_populations_file = total_file,
   parameter_means = c(1.6, 25, 0.99, 4000, 1, 1, 100, 200),
   parameter_cov_matrix = matrix(data = 0, nrow = 8, ncol = 8),
   time_step = "week",
@@ -576,6 +584,6 @@ results <- optimize(
   number_of_iterations = 20,
   number_of_cores = 10,
   temp = FALSE,
-  temperature_coefficient_file = "/tmp/weather.tif",
+  temperature_coefficient_file = weather_file,
   GRASS = TRUE
 )

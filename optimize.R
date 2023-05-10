@@ -18,7 +18,7 @@ pixel_treatments <- function(points, treatments_raster, treatments_file) {
 
 buffer_treatments <- function(points, treatments_raster, treatments_file, cost_raster) {
   rasterization_factor <- 10
-  buffers <- terra::buffer(points, width = points$buffer_size[[1]])
+  buffers <- terra::buffer(points, width = points$buffer_size)
   high_res_raster <- terra::disagg(treatments_raster, fact = rasterization_factor)
   buffers_raster <- terra::rasterize(buffers, high_res_raster)
   count_raster <- terra::aggregate(buffers_raster,
@@ -27,7 +27,7 @@ buffer_treatments <- function(points, treatments_raster, treatments_file, cost_r
       length(x[!is.na(x)])
     }
   )
-  treatment_raster <- count_raster / terra::global(count_raster, "max")[[1]]
+  treatments_raster <- count_raster / terra::global(count_raster, "max")[[1]]
   treatment_cost_raster <- treatments_raster * cost_raster
   terra::writeRaster(treatments_raster, treatments_file, overwrite = TRUE)
   actual_cost <- terra::global(treatment_cost_raster, "sum", na.rm = T)[[1]]
@@ -35,7 +35,7 @@ buffer_treatments <- function(points, treatments_raster, treatments_file, cost_r
 }
 
 treatments <- function(points, treatments_raster, treatments_file, cost_raster) {
-  if ("buffer_size" %in% colnames(points)) {
+  if ("buffer_size" %in% names(points)) {
     buffer_treatments(
       points,
       treatments_raster,
