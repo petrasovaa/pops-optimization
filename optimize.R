@@ -158,7 +158,7 @@ generation <- function(points,
     )
     evaluated <- run_pops(pops_parameters)
     if (evaluated / baseline < threshold) {
-      for (cat in as.character(candidate$cat[[1]])) {
+      for (cat in as.character(candidate$cat)) {
         new_weights[[cat]] <- new_weights[[cat]] + 1
       }
       evaluated_list[evaluated_index] <- evaluated
@@ -169,23 +169,22 @@ generation <- function(points,
       }
     }
     acceptance_rate <- length(evaluated_list) / tested
+    particles_left <- min_particles - length(evaluated_list)
+    min_evaluated <- minim_evaluated / baseline
     # print intermediate
     if (tested %% 10 == 0) {
-      if (length(evaluated_list) != 0) {
-        message(
-          "Rate: ", acceptance_rate,
-          ", particles left: ", min_particles - length(evaluated_list),
-          ", min evaluated: ", min(evaluated_list) / baseline,
-          ", median evaluated: ", median(evaluated_list) / baseline
-        )
-      }
+      message(
+        "Rate: ", acceptance_rate,
+        ", particles left: ", particles_left,
+        ", min evaluated: ", min_evaluated
+      )
     }
   }
   perc <- quantile(evaluated_list, probs = threshold_percentile / 100)
   output <- list(
     weights = new_weights,
     acceptance_rate = acceptance_rate,
-    threshold = perc / baseline_evaluated,
+    threshold = perc / baseline,
     best_candidate = best_candidate,
     best_candidate_evaluation = minim_evaluated,
     actual_cost = actual_cost
@@ -380,7 +379,7 @@ optimize <- function(infestation_potential_file,
     }
     new_weight_column <- paste0("weight_", iteration + 1)
     new_weights <- results$weights
-    filtered_df[[new_weight_column]] <- results$weights[match(
+    filtered_points[[new_weight_column]] <- results$weights[match(
       filtered_points$cat,
       as.integer(names(results$weights))
     )]
@@ -392,8 +391,8 @@ optimize <- function(infestation_potential_file,
       filter_percentile
     )
     before <- filtered_points[filtered_points[[new_weight_column]] > 0, ]
-    after <- tmp_df[tmp_df[[new_weight_column]] > 0, ]
-    if (sum(after_df$cost) >= budget) {
+    after <- tmp[tmp[[new_weight_column]] > 0, ]
+    if (sum(after$cost) >= budget) {
       message(
         "Filtered ", length(before) - length(after),
         ", remaining: ", length(after)
@@ -406,7 +405,7 @@ optimize <- function(infestation_potential_file,
     iteration <- iteration + 1
   }
 
-  results <- list(
+  output <- list(
     best_candidate = results$best_candidate,
     best_evaluation = results$best_candidate_evaluation,
     weights = filtered_points,
@@ -414,7 +413,7 @@ optimize <- function(infestation_potential_file,
     thresholds = thresholds,
     actual_cost_mean = actual_cost_mean
   )
-  return(results)
+  return(output)
 }
 
 library("PoPS")
