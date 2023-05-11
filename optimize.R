@@ -14,6 +14,7 @@ prior_weight <- function(cost_column, potential_column) {
 pixel_treatments <- function(points, treatments_raster, treatments_file) {
   raster <- terra::rasterize(points, treatments_raster, background = 0)
   terra::writeRaster(raster, treatments_file, overwrite = TRUE)
+  return(sum(points$cost))
 }
 
 buffer_treatments <- function(points, treatments_raster, treatments_file, cost_raster) {
@@ -36,15 +37,14 @@ buffer_treatments <- function(points, treatments_raster, treatments_file, cost_r
 
 treatments <- function(points, treatments_raster, treatments_file, cost_raster) {
   if ("buffer_size" %in% names(points)) {
-    buffer_treatments(
+    return(buffer_treatments(
       points,
       treatments_raster,
       treatments_file,
       cost_raster
-    )
-  } else {
-    pixel_treatments(points, treatments_raster, treatments_file)
+    ))
   }
+  return(pixel_treatments(points, treatments_raster, treatments_file))
 }
 
 run_pops <- function(parameters, management = TRUE) {
@@ -150,7 +150,7 @@ generation <- function(points,
   while (length(evaluated_list) < min_particles) {
     tested <- tested + 1
     candidate <- sample_candidate(points, weight_column, budget)
-    treatments(
+    cost <- treatments(
       candidate,
       treatments_raster,
       pops_parameters$treatments_file,
@@ -163,6 +163,7 @@ generation <- function(points,
       }
       evaluated_list[evaluated_index] <- evaluated
       evaluated_index <- evaluated_index + 1
+      actual_cost[evaluated_index] <- cost
       if (evaluated < minim_evaluated) {
         minim_evaluated <- evaluated
         best_candidate <- candidate
