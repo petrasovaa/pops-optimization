@@ -174,6 +174,7 @@ run_rpops <- function(config, treatment_raster = NULL) {
 
 rpops_init <- function(config) {
   config$function_name <- "multirun"
+  config$management <- FALSE
   config <- PoPS::configuration(config)
 
   if (!is.null(config$failure)) {
@@ -280,7 +281,7 @@ run_r.pops.spread <- function(parameters, treatment_raster = NULL) {
   )
   if (!is.null(treatment_raster)) {
     treatments <- "treatments_R_temp"
-    write_RAST(treatment_raster, treatments, flags = "overwrite")
+    write_RAST(treatment_raster, treatments, flags = c("o", "overwrite", "quiet"))
   } else {
     treatments <- ""
   }
@@ -485,6 +486,7 @@ generation <- function(points,
         best$candidate <- candidate
         best$score <- score
         best$cost <- treatment$cost
+        best$treatment <- treatment$raster
       }
     }
     acceptance_rate <- particle_count / tested
@@ -598,18 +600,6 @@ optimize <- function(infestation_potential_file,
                      use_host_uncertainty = FALSE) {
   # parameters for pops
   config <- as.list(environment())
-  config$infestation_potential_file <- NULL
-  config$cost_file <- NULL
-  config$min_particles <- NULL
-  config$budget <- NULL
-  config$filter_percentile <- NULL
-  config$threshold_percentile <- NULL
-  config$buffer_size_file <- NULL
-  config$score_weights <- NULL
-  config$quarantine_directions <- NULL
-  config$GRASS <- NULL
-
-  # grass_init()
 
   # extract infected points and associated cost and potential
   infected_raster <- terra::rast(infected_file)
@@ -654,16 +644,20 @@ optimize <- function(infestation_potential_file,
     run_pops <<- run_r.pops.spread
   } else {
     run_pops <<- run_rpops
+    config$quarantine_directions <- NULL
     config <- rpops_init(config)
   }
 
   # baseline
   baseline <- estimate_baseline(config)
+
   message("Baseline area:", baseline$infected_area)
-  message(
-    "Initial distance to quarantine boundary:",
-    baseline$quarantine_distance
-  )
+  if (score_weights[2] > 0) {
+    message(
+      "Initial distance to quarantine boundary:",
+      baseline$quarantine_distance
+    )
+  }
 
   # best guess
   best_guess <- best_guess(
@@ -675,10 +669,12 @@ optimize <- function(infestation_potential_file,
     config
   )
   message("Best guess infected area:", best_guess$result$infected_area)
-  message(
-    "Best guess distance to quarantine boundary:",
-    best_guess$result$quarantine_distance
-  )
+  if (score_weights[2] > 0) {
+    message(
+      "Best guess distance to quarantine boundary:",
+      best_guess$result$quarantine_distance
+    )
+  }
 
   # initial threshold
   thresholds <- c()
@@ -751,6 +747,35 @@ optimize <- function(infestation_potential_file,
     acceptance_rates = acceptance_rates,
     thresholds = thresholds
   )
+
+  cat("Baseline area:", baseline$infected_area, "\n")
+  cat("Best guess infected area:", best_guess$result$infected_area, "\n")
+  cat("Optimized infected area:", results$best$simulation$infected_area, "\n")
+
+  if (score_weights[2] > 0) {
+    cat(
+      "Initial distance to quarantine boundary:",
+      baseline$quarantine_distance, "\n"
+    )
+    cat(
+      "Best guess distance to quarantine boundary:",
+      best_guess$result$quarantine_distance, "\n"
+    )
+    cat(
+      "Optimized distance to quarantine boundary:",
+      results$best$simulation$quarantine_distance, "\n"
+    )
+  }
+  cat("Acceptance rates: ", acceptance_rates, "\n")
+  cat("Thresholds: ", thresholds, "\n")
+  if (file.exists(output_folder_path)) {
+    file_name <- file.path(output_folder_path, "best_candidate.gpkg")
+    terra::writeVector(results$best$candidate, file_name, overwrite = TRUE)
+    file_name <- file.path(output_folder_path, "best_treatment.tif")
+    terra::writeRaster(results$best$treatment, file_name, overwrite = TRUE)
+    file_name <- file.path(output_folder_path, "best_guess_candidate.gpkg")
+    terra::writeVector(best_guess$result$candidate, file_name, overwrite = TRUE)
+  }
   return(output)
 }
 
@@ -770,7 +795,8 @@ results <- optimize(
   infestation_potential_file = potential_file,
   cost_file = buffer_cost_file,
   buffer_size_file = buffer_size_file,
-  min_particles = 10,
+  min_particles = 50,
+  score_weights = c(0, 1),
   budget = 80000,
   filter_percentile = 15,
   threshold_percentile = 10,
@@ -791,11 +817,12 @@ results <- optimize(
   output_frequency = "year",
   output_frequency_n = 1,
   number_of_iterations = 20,
-  number_of_cores = 10,
+  number_of_cores = 20,
   temp = TRUE,
   temperature_coefficient_file = weather_file,
   use_quarantine = TRUE,
   quarantine_areas_file = quarantine_areas_file,
   quarantine_directions = "N,E",
+  output_folder_path = "/home/akratoc/dev/pops/optimization/data/",
   GRASS = FALSE
 )
