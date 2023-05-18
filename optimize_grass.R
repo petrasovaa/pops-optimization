@@ -650,7 +650,6 @@ optimize <- function(infestation_potential_file,
 
   # baseline
   baseline <- estimate_baseline(config)
-
   message("Baseline area:", baseline$infected_area)
   if (score_weights[2] > 0) {
     message(
@@ -780,7 +779,6 @@ optimize <- function(infestation_potential_file,
 }
 
 library("PoPS")
-# library("doParallel")
 
 potential_file <- "/home/akratoc/dev/pops/optimization/data/potential.tif"
 pixel_cost_file <- "/home/akratoc/dev/pops/optimization/data/walk_cost.tif"
