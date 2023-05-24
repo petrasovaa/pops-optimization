@@ -1,3 +1,4 @@
+
 prior_weight <- function(cost_column, potential_column) {
   minmax_scale <- function(column) {
     if (max(column) - min(column) > 0) {
@@ -175,6 +176,8 @@ run_pops <- function(config, treatment_raster = NULL) {
 pops_init <- function(config) {
   config$function_name <- "multirun"
   config$management <- FALSE
+  config$use_initial_condition_uncertainty <- FALSE
+  config$use_host_uncertainty <- FALSE
   config <- PoPS::configuration(config)
 
   if (!is.null(config$failure)) {
@@ -250,7 +253,9 @@ estimate_initial_threshold <- function(points,
     results_list[[run]] <- run_pops(config, treatment$raster)
   }
   scores <- sapply(results_list, scoring, baseline, score_weights)
-  return(quantile(scores, probs = 0.1))
+  threshold <- quantile(scores, probs = 0.1)
+  threshold_step <- abs(threshold - quantile(scores, probs = 0.2))
+  return(list(threshold = threshold, threshold_step = threshold_step))
 }
 
 scoring <- function(simulated, baseline, weights=c(1, 1)) {
@@ -306,6 +311,7 @@ generation <- function(points,
                        min_particles,
                        threshold_percentile,
                        threshold,
+                       threshold_step,
                        baseline,
                        score_weights,
                        config) {
@@ -351,12 +357,25 @@ generation <- function(points,
         ", best score: ", best$score
       )
     }
+    if ((tested == 50) && (acceptance_rate < 0.05 || acceptance_rate > 0.15)) {
+      if (acceptance_rate < 0.05) {
+        threshold <- threshold + threshold_step
+      } else {
+        threshold <- threshold - threshold_step
+      }
+      particle_count <- 0
+      tested <- 0
+      best$score <- 1
+      new_weights <- setNames(as.list(rep(0, length(points$cat))), points$cat)
+    }
   }
   new_threshold <- quantile(score_list, probs = threshold_percentile / 100)
+  threshold_step <- abs(new_threshold - quantile(score_list, probs = (threshold_percentile + 10) / 100))
   output <- list(
     weights = new_weights,
     acceptance_rate = acceptance_rate,
     threshold = new_threshold,
+    threshold_step = threshold_step,
     best = best
   )
   return(output)
@@ -374,6 +393,33 @@ filter_particles <- function(points, weight_column, iteration, percentile) {
   return(points)
 }
 
+#' @title Optimize treatments using ABC
+#'
+#' @description Optimizes treatment locations using ABC based on infestation potential and cost.
+#' Treatments are pixel based with the option to specify constant or variable buffer size.
+#' The criteria can be infected area, distance to quarantine boundary or both.
+#'
+#'
+#' @inheritParams pops_multirun
+#' @param infestation_potential_file Raster file with infestation potential.
+#' @param cost_file Raster file with cost of treatment
+#'  (constant value or spatially variable). When buffers are used,
+#'  the cost must represent the cost of the buffer around a pixel.
+#' @param buffer_size_file Raster file with size of buffers
+#' (constant values or spatially variable).
+#' @param min_particles Number of successful combinations per generation.
+#' @param budget Budget to spend. Limits the number of pixels that can be treated.
+#' @param score_weights Weights to compute weighted average of infected_area and 
+#' distance to quarantine boundary success metrics. For example, c(1, 0) means only
+#' infected area is used, c(2, 1) means both metrics are averaged with provided weights.
+#' @param filter_percentile Lower value removes fewer pixels from the pool,
+#' resulting in more iterations and lower acceptance rate, but potentially better results.
+#' @param threshold_percentile Determines threshold for next iteration.
+
+#' @useDynLib PoPS, .registration = TRUE
+#' @return results
+#' @export
+#'
 optimize <- function(infestation_potential_file,
                      cost_file,
                      buffer_size_file = NULL,
@@ -446,9 +492,7 @@ optimize <- function(infestation_potential_file,
                      write_outputs = "None",
                      output_folder_path = "",
                      network_filename = "",
-                     network_movement = "walk",
-                     use_initial_condition_uncertainty = FALSE,
-                     use_host_uncertainty = FALSE) {
+                     network_movement = "walk") {
   # parameters for pops
   config <- as.list(environment())
 
@@ -520,7 +564,8 @@ optimize <- function(infestation_potential_file,
 
   # initial threshold
   thresholds <- c()
-  thresholds[1] <- estimate_initial_threshold(
+  
+  initial_threshold <- estimate_initial_threshold(
     infected_points,
     weight_column,
     treatments_raster,
@@ -530,6 +575,8 @@ optimize <- function(infestation_potential_file,
     score_weights,
     config
   )
+  thresholds[1] <- initial_threshold$threshold
+  threshold_step <- initial_threshold$threshold_step
 
   filtered_points <- infected_points
   tmp_points <- infected_points
@@ -548,12 +595,14 @@ optimize <- function(infestation_potential_file,
       min_particles,
       threshold_percentile,
       thresholds[length(thresholds)],
+      threshold_step,
       baseline,
       score_weights,
       config
     )
     acceptance_rates <- append(acceptance_rates, results$acceptance_rate)
     thresholds <- append(thresholds, results$threshold)
+    threshold_step <- results$threshold_step
     new_weight_column <- paste0("weight_", iteration + 1)
     new_weights <- results$weights
     filtered_points[[new_weight_column]] <- results$weights[match(
@@ -617,52 +666,8 @@ optimize <- function(infestation_potential_file,
     terra::writeRaster(results$best$treatment, file_name, overwrite = TRUE)
     file_name <- file.path(output_folder_path, "best_guess_candidate.gpkg")
     terra::writeVector(best_guess$result$candidate, file_name, overwrite = TRUE)
+    file_name <- file.path(output_folder_path, "output.rdata")
+    save(output, file = file_name)
   }
   return(output)
 }
-
-library("PoPS")
-
-potential_file <- "/home/akratoc/dev/pops/optimization/data/potential.tif"
-pixel_cost_file <- "/home/akratoc/dev/pops/optimization/data/walk_cost.tif"
-infected_file <- "/home/akratoc/dev/pops/optimization/data/infected_2019.tif"
-host_file <- "/home/akratoc/dev/pops/optimization/data/host.tif"
-total_file <- "/home/akratoc/dev/pops/optimization/data/total.tif"
-weather_file <- "/home/akratoc/dev/pops/optimization/data/weather.tif"
-buffer_size_file <- "/home/akratoc/dev/pops/optimization/data/buffer_size.tif"
-buffer_cost_file <- "/home/akratoc/dev/pops/optimization/data/buffer_cost.tif"
-quarantine_areas_file <- "/home/akratoc/dev/pops/optimization/data/quarantine.tif"
-results <- optimize(
-  infestation_potential_file = potential_file,
-  cost_file = buffer_cost_file,
-  buffer_size_file = buffer_size_file,
-  min_particles = 50,
-  score_weights = c(0, 1),
-  budget = 80000,
-  filter_percentile = 15,
-  threshold_percentile = 10,
-  infected_file = infected_file,
-  host_file = host_file,
-  total_populations_file = total_file,
-  parameter_means = c(0.7, 25, 0.95, 4000, 1, 1, 100, 200),
-  parameter_cov_matrix = matrix(data = 0, nrow = 8, ncol = 8),
-  time_step = "week",
-  start_date = "2019-01-01",
-  end_date = "2023-12-31",
-  natural_kernel_type = "exponential",
-  anthropogenic_kernel_type = "cauchy",
-  treatment_dates = c("2019-12-01"),
-  natural_dir = "N",
-  anthropogenic_dir = "N",
-  random_seed = 1,
-  output_frequency = "year",
-  output_frequency_n = 1,
-  number_of_iterations = 20,
-  number_of_cores = 20,
-  temp = TRUE,
-  temperature_coefficient_file = weather_file,
-  use_quarantine = TRUE,
-  quarantine_areas_file = quarantine_areas_file,
-  quarantine_directions = "N,E",
-  output_folder_path = "/home/akratoc/dev/pops/optimization/data/"
-)
